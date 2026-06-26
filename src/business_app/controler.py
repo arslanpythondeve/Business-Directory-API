@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.utils.cache import clear_cache
 from src.utils.redis_db import redis_client
+from src.business_app.tasks import process_large_request
 from src.business_app.models import YelpCompany, EnrollCompany, WordOfMouthCompany
 
 
@@ -27,17 +28,27 @@ async def get_paginated_records(db: AsyncSession, model, page: int, limit: int, 
             "data": [{c.name: getattr(row, c.name) for c in row.__table__.columns} for row in rows]}
 
 async def get_word_of_mouth_business(db: AsyncSession, page: int, limit: int, sort: str):
+    if limit > 50:
+        task = process_large_request.delay(source="wfm", page=page, limit=limit, sort=sort)
+
+        return {"message": "Request is processing in background.", "task_id": task.id}
+
     cache_key = f"wom:{page}:{limit}:{sort}"
     cached = await redis_client.get(cache_key)
 
     if cached:
         return json.loads(cached)
 
-    result = await get_paginated_records(db, WordOfMouthCompany, page, limit, sort )
+    result = await get_paginated_records(db, WordOfMouthCompany, page, limit, sort)
     await redis_client.setex(cache_key, 300, json.dumps(result))
     return result
 
 async def get_yelp_business(db: AsyncSession, page: int, limit: int, sort: str):
+    if limit > 50:
+        task = process_large_request.delay(source="yelp", page=page, limit=limit, sort=sort)
+
+        return {"message": "Request is processing in background.", "task_id": task.id}
+
     cache_key = f"yelp:{page}:{limit}:{sort}"
     cached = await redis_client.get(cache_key)
 
@@ -49,8 +60,11 @@ async def get_yelp_business(db: AsyncSession, page: int, limit: int, sort: str):
     return result
 
 async def get_enroll_business(db: AsyncSession, page: int, limit: int, sort: str):
-    cache_key = f"enroll:{page}:{limit}:{sort}"
+    if limit > 50:
+        task = process_large_request.delay(source="enroll", page=page, limit=limit, sort=sort)
+        return {"message": "Request is processing in background.", "task_id": task.id}
 
+    cache_key = f"enroll:{page}:{limit}:{sort}"
     cached = await redis_client.get(cache_key)
 
     if cached:

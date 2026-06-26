@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.utils.db import get_db
 from src.user.models import UserModel
 from src.business_app import controler
+from celery.result import AsyncResult
+from src.utils.celery_app import celery
 from src.utils.helper import is_authenticated
 from src.business_app.dtos import CompanyCreate, BusinessQueryParams
 
@@ -64,3 +66,18 @@ async def delete_company(source: str, company_name: str, db: AsyncSession = Depe
     user: UserModel = Depends(is_authenticated)):
 
     return await controler.delete_company(db, source, company_name, user)
+
+@business_routes.get("/task/{task_id}")
+async def get_task(task_id: str):
+    task = AsyncResult(task_id, app=celery)
+
+    if task.state == "PENDING":
+        return {"status": "Processing"}
+
+    elif task.state == "SUCCESS":
+        return {"status": "Completed", "data": task.result}
+
+    elif task.state == "FAILURE":
+        return {"status": "Failed"}
+
+    return {"status": task.state}

@@ -10,3 +10,4 @@ uvicorn[standard]==0.38.0
 asyncpg
 pwdlib[argon2]
 argon2-cffi
+celery==5.5.3
